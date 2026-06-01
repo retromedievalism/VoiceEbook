@@ -7,6 +7,24 @@ from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 from pydub import AudioSegment
 
+# ---------------------------------------------------------------------------
+# PATCH: perth watermarker is broken on macOS / some installs.
+# chatterbox.tts calls perth.PerthImplicitWatermarker() which is None,
+# causing TypeError: 'NoneType' object is not callable.
+# We monkey-patch it to a no-op dummy before chatterbox ever imports it.
+# ---------------------------------------------------------------------------
+import sys
+from unittest.mock import MagicMock
+
+_perth_mock = MagicMock()
+_perth_mock.PerthImplicitWatermarker = lambda *a, **k: MagicMock(embed=lambda *a, **k: None)
+sys.modules["perth"] = _perth_mock
+# Also pre-populate the attribute in case perth was already partially imported
+import types
+if "perth" in sys.modules and not isinstance(sys.modules["perth"], MagicMock):
+    sys.modules["perth"].PerthImplicitWatermarker = _perth_mock.PerthImplicitWatermarker
+
+
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
@@ -72,17 +90,6 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         # Lazy import so startup is fast
 # Patch broken perth watermarker before importing chatterbox
 # perth.PerthImplicitWatermarker is None on some installs, causing TypeError
-import importlib
-try:
-    perth = importlib.import_module("perth")
-    if perth.PerthImplicitWatermarker is None:
-        class _DummyWatermarker:
-            def __init__(self, *a, **k): pass
-            def embed(self, *a, **k): pass
-        perth.PerthImplicitWatermarker = _DummyWatermarker
-except Exception:
-    pass
-
         from chatterbox.tts import ChatterboxTTS
         import torchaudio
 

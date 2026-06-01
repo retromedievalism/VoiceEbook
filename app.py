@@ -44,6 +44,15 @@ def split_into_chunks(text: str, max_chars: int = 250) -> list[str]:
     return [c for c in chunks if c.strip()]
 
 
+def convert_to_wav(src_path: str) -> str:
+    """Convert any audio file to 16-bit mono WAV that Chatterbox expects."""
+    wav_path = str(Path(src_path).with_suffix(".wav"))
+    audio = AudioSegment.from_file(src_path)
+    audio = audio.set_channels(1).set_frame_rate(22050).set_sample_width(2)
+    audio.export(wav_path, format="wav")
+    return wav_path
+
+
 def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
     try:
         jobs[job_id]["status"] = "extracting"
@@ -56,6 +65,9 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         chunks = split_into_chunks(text)
         total = len(chunks)
         jobs[job_id]["total"] = total
+
+        # Convert voice sample to WAV (Chatterbox requires WAV)
+        wav_voice_path = convert_to_wav(voice_path)
 
         # Lazy import so startup is fast
         from chatterbox.tts import ChatterboxTTS
@@ -70,7 +82,7 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         for i, chunk in enumerate(chunks):
-            wav = model.generate(chunk, audio_prompt_path=voice_path)
+            wav = model.generate(chunk, audio_prompt_path=wav_voice_path)
             seg_path = tmp_dir / f"chunk_{i:05d}.wav"
             torchaudio.save(str(seg_path), wav, model.sr)
             segment_paths.append(str(seg_path))

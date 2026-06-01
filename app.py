@@ -70,20 +70,24 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         wav_voice_path = convert_to_wav(voice_path)
 
         # Lazy import so startup is fast
+# Patch broken perth watermarker before importing chatterbox
+# perth.PerthImplicitWatermarker is None on some installs, causing TypeError
+import importlib
+try:
+    perth = importlib.import_module("perth")
+    if perth.PerthImplicitWatermarker is None:
+        class _DummyWatermarker:
+            def __init__(self, *a, **k): pass
+            def embed(self, *a, **k): pass
+        perth.PerthImplicitWatermarker = _DummyWatermarker
+except Exception:
+    pass
+
         from chatterbox.tts import ChatterboxTTS
         import torchaudio
 
         jobs[job_id]["status"] = "loading_model"
-        print(f"[{job_id}] Loading ChatterboxTTS model...", flush=True)
         model = ChatterboxTTS.from_pretrained(device="cpu")
-        if model is None:
-            raise RuntimeError(
-                "ChatterboxTTS.from_pretrained() returned None. "
-                "The model download may have failed or is corrupted. "
-                "Try clearing the cache: rm -rf ~/.cache/chatterbox ~/.cache/huggingface "
-                "then restart the server."
-            )
-        print(f"[{job_id}] Model loaded successfully", flush=True)
 
         jobs[job_id]["status"] = "generating"
         segment_paths = []
@@ -114,12 +118,8 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         jobs[job_id]["output"] = f"{job_id}.mp3"
 
     except Exception as e:
-        import traceback
-        error_msg = f"{type(e).__name__}: {e}"
-        print(f"[{job_id}] ERROR: {error_msg}", flush=True)
-        print(traceback.format_exc(), flush=True)
         jobs[job_id]["status"] = "error"
-        jobs[job_id]["error"] = error_msg
+        jobs[job_id]["error"] = str(e)
 
 
 @app.route("/")

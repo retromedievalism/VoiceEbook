@@ -7,30 +7,11 @@ from werkzeug.utils import secure_filename
 from pypdf import PdfReader
 from pydub import AudioSegment
 
-# ---------------------------------------------------------------------------
-# PATCH: perth watermarker is broken on macOS / some installs.
-# chatterbox.tts calls perth.PerthImplicitWatermarker() which is None,
-# causing TypeError: 'NoneType' object is not callable.
-# We monkey-patch it to a no-op dummy before chatterbox ever imports it.
-# ---------------------------------------------------------------------------
-import sys
-from unittest.mock import MagicMock
-
-_perth_mock = MagicMock()
-_perth_mock.PerthImplicitWatermarker = lambda *a, **k: MagicMock(embed=lambda *a, **k: None)
-sys.modules["perth"] = _perth_mock
-# Also pre-populate the attribute in case perth was already partially imported
-import types
-if "perth" in sys.modules and not isinstance(sys.modules["perth"], MagicMock):
-    sys.modules["perth"].PerthImplicitWatermarker = _perth_mock.PerthImplicitWatermarker
-
-
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB
 
-# Track job progress
 jobs = {}
 
 
@@ -45,7 +26,6 @@ def extract_pdf_text(pdf_path: str) -> str:
 
 
 def split_into_chunks(text: str, max_chars: int = 250) -> list[str]:
-    """Split text into sentence-aware chunks the TTS engine can handle."""
     import re
     sentences = re.split(r'(?<=[.!?])\s+', text)
     chunks = []
@@ -63,7 +43,6 @@ def split_into_chunks(text: str, max_chars: int = 250) -> list[str]:
 
 
 def convert_to_wav(src_path: str) -> str:
-    """Convert any audio file to 16-bit mono WAV that Chatterbox expects."""
     wav_path = str(Path(src_path).with_suffix(".wav"))
     audio = AudioSegment.from_file(src_path)
     audio = audio.set_channels(1).set_frame_rate(22050).set_sample_width(2)
@@ -81,20 +60,14 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
             return
 
         chunks = split_into_chunks(text)
-        total = len(chunks)
-        jobs[job_id]["total"] = total
+        jobs[job_id]["total"] = len(chunks)
 
-        # Convert voice sample to WAV (Chatterbox requires WAV)
         wav_voice_path = convert_to_wav(voice_path)
 
-        # Lazy import so startup is fast
-# Patch broken perth watermarker before importing chatterbox
-# perth.PerthImplicitWatermarker is None on some installs, causing TypeError
-        from chatterbox.tts import ChatterboxTTS
-        import torchaudio
+        from TTS.api import TTS
 
         jobs[job_id]["status"] = "loading_model"
-        model = ChatterboxTTS.from_pretrained(device="cpu")
+        tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
 
         jobs[job_id]["status"] = "generating"
         segment_paths = []
@@ -102,9 +75,13 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         for i, chunk in enumerate(chunks):
-            wav = model.generate(chunk, audio_prompt_path=wav_voice_path)
             seg_path = tmp_dir / f"chunk_{i:05d}.wav"
-            torchaudio.save(str(seg_path), wav, model.sr)
+            tts.tts_to_file(
+                text=chunk,
+                speaker_wav=wav_voice_path,
+                language="en",
+                file_path=str(seg_path),
+            )
             segment_paths.append(str(seg_path))
             jobs[job_id]["done"] = i + 1
 
@@ -116,7 +93,6 @@ def run_tts_job(job_id: str, pdf_path: str, voice_path: str):
         out_path = Path(app.config["OUTPUT_FOLDER"]) / f"{job_id}.mp3"
         combined.export(str(out_path), format="mp3")
 
-        # Clean up temp chunks
         for path in segment_paths:
             os.remove(path)
         tmp_dir.rmdir()

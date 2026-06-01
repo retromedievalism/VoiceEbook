@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceEbook</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f11;
+      color: #e8e8ed;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .card {
+      background: #1a1a1f;
+      border: 1px solid #2e2e38;
+      border-radius: 16px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 0.3rem;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #aaa;
+      margin-bottom: 0.4rem;
+      margin-top: 1.2rem;
+    }
+
+    .drop-zone {
+      border: 2px dashed #3a3a48;
+      border-radius: 10px;
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #7c6af7;
+      background: #1e1c2e;
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon { font-size: 1.8rem; margin-bottom: 0.4rem; }
+    .drop-text { font-size: 0.85rem; color: #666; }
+    .drop-name { font-size: 0.9rem; color: #7c6af7; margin-top: 0.3rem; font-weight: 500; }
+
+    button {
+      margin-top: 2rem;
+      width: 100%;
+      padding: 0.9rem;
+      background: #7c6af7;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover:not(:disabled) { background: #6a58e0; }
+    button:disabled { background: #3a3a48; color: #666; cursor: not-allowed; }
+
+    #progress-area {
+      display: none;
+      margin-top: 1.5rem;
+    }
+
+    .progress-label {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-bar-track {
+      background: #2e2e38;
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c6af7, #a78bfa);
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .status-msg {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+
+    #download-area {
+      display: none;
+      margin-top: 1.5rem;
+      text-align: center;
+    }
+
+    #download-area a {
+      display: inline-block;
+      padding: 0.8rem 2rem;
+      background: #16a34a;
+      color: #fff;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    #download-area a:hover { background: #15803d; }
+
+    #error-area {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.8rem 1rem;
+      background: #2a1515;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #f87171;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎙️ VoiceEbook</h1>
+    <p class="subtitle">Turn your PDF into an audiobook — in your own voice.</p>
+
+    <form id="main-form">
+      <label>Your PDF eBook</label>
+      <div class="drop-zone" id="pdf-zone">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Click or drag your PDF here</div>
+        <div class="drop-name" id="pdf-name"></div>
+        <input type="file" name="pdf" id="pdf-input" accept=".pdf" required />
+      </div>
+
+      <label>Your Voice Sample <span style="color:#555;font-weight:400">(3–30 sec, any format)</span></label>
+      <div class="drop-zone" id="voice-zone">
+        <div class="drop-icon">🎤</div>
+        <div class="drop-text">Click or drag an audio file here</div>
+        <div class="drop-name" id="voice-name"></div>
+        <input type="file" name="voice" id="voice-input" accept="audio/*" required />
+      </div>
+
+      <button type="submit" id="submit-btn">Generate Audiobook</button>
+    </form>
+
+    <div id="progress-area">
+      <div class="progress-label" id="progress-label">Starting…</div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="status-msg" id="status-msg"></div>
+    </div>
+
+    <div id="download-area">
+      <p style="color:#4ade80;margin-bottom:1rem;font-weight:600">✅ Your audiobook is ready!</p>
+      <a id="download-link" href="#">⬇ Download MP3</a>
+    </div>
+
+    <div id="error-area" id="error-msg"></div>
+  </div>
+
+  <script>
+    const pdfInput = document.getElementById("pdf-input");
+    const voiceInput = document.getElementById("voice-input");
+
+    pdfInput.addEventListener("change", () => {
+      document.getElementById("pdf-name").textContent = pdfInput.files[0]?.name || "";
+    });
+    voiceInput.addEventListener("change", () => {
+      document.getElementById("voice-name").textContent = voiceInput.files[0]?.name || "";
+    });
+
+    ["pdf-zone", "voice-zone"].forEach(id => {
+      const zone = document.getElementById(id);
+      zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+      zone.addEventListener("drop", e => { e.preventDefault(); zone.classList.remove("dragover"); });
+    });
+
+    const statusMessages = {
+      queued: "Waiting to start…",
+      extracting: "Extracting text from PDF…",
+      loading_model: "Loading voice model (first run takes a minute)…",
+      generating: null,
+      stitching: "Stitching audio together…",
+      done: "Done!",
+    };
+
+    document.getElementById("main-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const form = e.target;
+      const btn = document.getElementById("submit-btn");
+      const progressArea = document.getElementById("progress-area");
+      const downloadArea = document.getElementById("download-area");
+      const errorArea = document.getElementById("error-area");
+
+      btn.disabled = true;
+      progressArea.style.display = "block";
+      downloadArea.style.display = "none";
+      errorArea.style.display = "none";
+
+      const data = new FormData(form);
+      let res, job;
+
+      try {
+        res = await fetch("/generate", { method: "POST", body: data });
+        job = await res.json();
+      } catch (err) {
+        showError("Could not connect to server. Is it running?");
+        btn.disabled = false;
+        return;
+      }
+
+      if (job.error) { showError(job.error); btn.disabled = false; return; }
+
+      const jobId = job.job_id;
+      poll(jobId, btn);
+    });
+
+    function poll(jobId, btn) {
+      const interval = setInterval(async () => {
+        const res = await fetch(`/status/${jobId}`);
+        const job = await res.json();
+
+        const label = document.getElementById("progress-label");
+        const fill = document.getElementById("progress-fill");
+        const msg = document.getElementById("status-msg");
+
+        if (job.status === "generating" && job.total > 0) {
+          const pct = Math.round((job.done / job.total) * 100);
+          label.textContent = `Generating audio… ${job.done} / ${job.total} chunks`;
+          fill.style.width = pct + "%";
+          msg.textContent = `${pct}% complete`;
+        } else if (statusMessages[job.status]) {
+          label.textContent = statusMessages[job.status];
+          if (job.status === "loading_model") fill.style.width = "5%";
+          if (job.status === "stitching") fill.style.width = "95%";
+        }
+
+        if (job.status === "done") {
+          clearInterval(interval);
+          fill.style.width = "100%";
+          label.textContent = "Done!";
+          document.getElementById("progress-area").style.display = "none";
+          document.getElementById("download-area").style.display = "block";
+          document.getElementById("download-link").href = `/download/${jobId}`;
+          btn.disabled = false;
+        }
+
+        if (job.status === "error") {
+          clearInterval(interval);
+          document.getElementById("progress-area").style.display = "none";
+          showError(job.error || "Something went wrong.");
+          btn.disabled = false;
+        }
+      }, 2000);
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("error-area");
+      el.textContent = "⚠️ " + msg;
+      el.style.display = "block";
+    }
+  </script>
+</body>
+</html>

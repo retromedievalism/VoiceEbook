@@ -1,0 +1,7 @@
+flask>=3.0.0
+pypdf>=4.0.0
+chatterbox-tts>=0.1.1
+torch>=2.0.0
+torchaudio>=2.0.0
+pydub>=0.25.1
+werkzeug>=3.0.0
